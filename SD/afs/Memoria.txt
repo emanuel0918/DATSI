@@ -1,0 +1,46 @@
+Practica de Sistemas distribuidos: Java AFS
+
+Preparacion a la practica: 
+En esa parte hemos intentado entender el codigo otorgado. Nos hemos concentrado en los test para entender lo que tenia que hacer cada funcion y se miro ejemplos de anos pasados. 
+
+
+Fase 1: Lectura del fichero.
+Esa parte tratara de las funciones de download, de read, seek y length. 
+
+Download: La funcion de download en si no supone ningun problema, ya que consite principalmente en iniciar el reader. 
+
+Reader (readerImpl): Para iniciar el reader le pedimos acceder al fichero (con una Exepcion que iremos llevando hasta el cliente si se acciona). Se iniciara tambien un vice que nos servira a recuperar algunos datos del cliente y del fichero. Eso nos servira principalmente en la tercera parte. 
+Se inicio un offset aunque no es necesario, existe principalmente para evitar llamar mas funciones que necesarias. En la funcion read, se lee y se manda por bloques el fichero para que se pueda hacer una copia local. Aunque el la funcion read() de la clase AccessRandomFile ofrece una seguridad para no leer mas que necesario, se decidio en esa implementacion de usar el tamano para no leer mas que necesario. 
+
+Open (cliente): Cuando abrimos el fichero vamos a pedir una descarga. Recuperamos los datos del fichero a traver del reader (realmente obtenemos la localizacion del fichero a traves de un objeto). Para poder crear y escribir el fichero en el cache lo tenemos que abrir en mode de escritura. Para poder meter el mismo modo que el deseado por el cliente, cerraremos el fichero despues para abrirlo en el buen modo ya que el RandomAccessFile no permite cambio de modo de apertura. Escribiremos en el fichero usando la funcion read remota, y leyendo por bloques el fichero. 
+
+Read (cliente): Esta funcion a sido pensada para leer el fichero de manera remota aunque no deberia pasar (a notar que no hace descarga del fichero ya que solo lo hace la funcion open()). En el caso en el que el fichero no sea remoto, simplemente usamos un read de la clase AccessRandomFile.
+
+Seek (cliente): Por seguridad no dejamos el puntador mas haya del tamano del documento, a pesar que la clase AccessRandomFile lo gestiona solo. 
+
+SetLength(cliente): En el caso que el nuevo tamano sea mas pequeno, se recorta el documento (funcionamiento del setLength de la clase RandomAccessFile normal). En el caso que el nuevo tamano sea mayor, para evitar problemas a la hora de cerrar el documento, rellenaremos el documento de espacio vacios " " hasta alcanzar el nuevo tamano. 
+
+Close (reader): Simplemente ceramos el fichero, ya que no se ha modificado nada. 
+
+Fase 2: Escritura en el fichero: 
+
+Upload: Igual que la funcion download, nos sirve sobre todo en a recuperar la localizacion del objeto fichero. 
+
+Close (writer): En esta fase esta funcion simplemente cierra el writer. 
+
+write (writer): En esta funcion, escribimos bloque por bloque nuevos datos que se la ha anadido al fichero. Reescribimos el fichero en entero. La operacion es la misma que la descarga pero en el otro sentido
+
+Write(cliente): Cuando escribe el cliente simplemente se modifica su copia local, aun no se modifica en el servidor.
+
+Close (cliente): Aqui es donde tratamos todo la informacion para mandarla al writer. 
+
+Fase 3: Aspectos de coherencia 
+
+Lock en read: Para poder leer, hemos anadido un lock a la entrada de la funcion read del Reader y lo desbloquemos a la salida. Eso tiene un problemilla, que permitiria escribir entre dos bloques de lectura. Para resolver ese problema, deberiamos anadir al menos una funcion remota que podriamos llamar con el cliente (lo que hemos entendido como prohibido). 
+
+Lock en Write: Aqui hemos anadido el bloqueo en escritura a partir del momento que creamos nuestro writer. Desbloqueamos la escritura de este documento cuando lo cerramos. 
+
+Modificacion de documento mientras otros clientes lo tiene en cache: Cuando el fichero del servidor es modificado, se manda un mensaje a todos los clientes lo que permite borrar los ficheros de todos los clientes. Si un cliente aun no cero su copia, entonces podra seguir leyendo y modificando su version. 
+Nota: En el caso en el que varios clientes tienen abiertos en escritura el fichero, es el ultimo en cerra el fichero en su maquina quien impone su copia al servidor. Ese funcionamiento es el por defecto de nuestra implementacion. En el hypotetico caso en el que no se desea esto, seria necesario anadir una variable para impedir escribir en los ficheros aun existente tras un callback. (en la funcion Write de la clase VenusFile, asi se podria no mandar los datos al servidor pero el cliente abria echo cambias para nada).
+
+
